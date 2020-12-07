@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using NNDD.Entities;
 using NNDD.Entities.ResultEntities;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -66,6 +67,41 @@ namespace NNDD.Controllers
             return info;
         }
 
+        [Route("{id}/a")]
+        [ApiExplorerSettings(IgnoreApi = true)]
+        public async Task GetNNDVideoAsAudioAsync(string id)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(id)) throw new Exception("no video ID specified");
+                var c = _httpClientManager.GetManagedHttpClient();
+
+                HttpContext.Response.ContentType = "audio/mpeg";
+                var ffmpeg = Process.Start(new ProcessStartInfo
+                {
+                    FileName = "ffmpeg",
+                    Arguments =
+                        $@"-i ""https://{this.HttpContext.Request.Host.Value}/nnd/{id}"" -f mp3 -ac 2 -b:a 320k pipe:1",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false
+                });
+                //await Task.Delay(5000);
+                int read;
+                byte[] buffer = new byte[8192];
+                while ((read = await ffmpeg.StandardOutput.BaseStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                {
+                    await HttpContext.Response.Body.WriteAsync(buffer, 0, read);
+                }
+
+                //_logger.LogInformation(ffmpeg.StandardError.ReadToEnd());
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+
         [Route("{id}")]
         [ApiExplorerSettings(IgnoreApi = true)]
         public async Task GetNNDVideoAsync(string id)
@@ -73,7 +109,7 @@ namespace NNDD.Controllers
             if (string.IsNullOrWhiteSpace(id)) throw new Exception("no video ID specified");
             var c = _httpClientManager.GetManagedHttpClient();
 
-            await DoLoginAsync(c, "EMAIL/TEL", "PASSWORD");
+            await DoLoginAsync(c, "EMAIL/TEL", "PASSWD");
 
             try
             {

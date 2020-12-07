@@ -1,12 +1,16 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Miku.Entities.Youtube;
 using NNDD.Entities;
 using NNDD.Entities.ResultEntities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Text.Json;
 using System.Threading.Tasks;
 using YoutubeExplode;
+using YoutubeExplode.Videos;
 using YoutubeExplode.Videos.Streams;
 
 namespace NNDD.Controllers
@@ -29,24 +33,47 @@ namespace NNDD.Controllers
         [Route("{id}/info")]
         public async Task<TrackInfo> GetYTTrackInfoAsync(string id)
         {
-            var video = await _youtubeClient.Videos.GetAsync($"https://youtube.com/watch?v=" + id);
-            var user = await _youtubeClient.Channels.GetAsync(video.ChannelId);
-            var manif = await _youtubeClient.Videos.Streams.GetManifestAsync(video.Id);
+            var c = _httpClientManager.GetManagedHttpClient();
+            var ret = await c.Client.GetStringAsync($"https://youtube.com/get_video_info?video_id={id}&hl=en&el=embedded");
+            var hm = WebUtility.UrlDecode(ret);
+            var t = hm.IndexOf('{');
+            var c1 = hm.Substring(t);
+            var l = c1.LastIndexOf('}');
+            var c2 = c1.Substring(0, l + 1);
+            var h = JsonSerializer.Deserialize<YoutubeVideo>(c2);
+            Uri audurl = default; 
+
+            if (h.StreamingDataField == null || h.StreamingDataField?.AdaptiveFormats?.Any(x => x.Url == null) == true)
+            {
+                var manif = await _youtubeClient.Videos.Streams.GetManifestAsync(new VideoId(id));
+                audurl = new Uri(manif.GetAudioOnly().WithHighestBitrate().Url);
+                _logger.LogInformation("YE handled");
+            }
+            else
+            {
+                audurl = h.StreamingDataField
+                .AdaptiveFormats
+                .OrderByDescending(x => x.AudioSampleRate)
+                .First(x => x.MimeType.Contains("opus")).Url;
+                _logger.LogInformation("Direct handled");
+            }
             var info = new TrackInfo
             {
-                Author = video.Author,
-                AuthorIconUrl = new Uri(user.LogoUrl),
-                AuthorUrl = new Uri(user.Url),
-                IsLive = false,
-                Length = video.Duration.TotalSeconds,
-                DirectUrl = new Uri(manif.GetAudioOnly().WithHighestBitrate().Url),
-                ThumbnailUrl = new Uri(video.Thumbnails.MaxResUrl),
-                Title = video.Title,
-                TrackUrl = new Uri(video.Url),
-                UploadDate = video.UploadDate
+                Author = h.VideoDetailsField.Author,
+                AuthorIconUrl = null, //no fast endpoint for that
+                AuthorUrl = h.MicroformatField.PlayerMicroformatRenderer.OwnerProfileUrl,
+                IsLive = h.VideoDetailsField.IsLiveContent.GetValueOrDefault(),
+                Length = double.Parse(h.VideoDetailsField.LengthSeconds),
+                DirectUrl = audurl,
+                ThumbnailUrl = h.VideoDetailsField.Thumbnail.Thumbnails.OrderByDescending(x => x.Width).First().Url,
+                Title = h.VideoDetailsField.Title,
+                TrackUrl = new Uri($"https://www.youtube.com/watch?v={h.VideoDetailsField.VideoId}"),
+                UploadDate = h.MicroformatField.PlayerMicroformatRenderer.UploadDate.GetValueOrDefault()
             };
+            c.ChangeStatus();
             return info;
         }
+
         [Route("{id}")]
         public async Task GetYTTrackWiteAsync(string id)
         {
@@ -55,8 +82,17 @@ namespace NNDD.Controllers
             try
             {
                 //var video = await _youtubeClient.Videos.GetAsync($"https://youtube.com/watch?v=" + id);
-                var manif = await _youtubeClient.Videos.Streams.GetManifestAsync(id);
-                var url = manif.GetMuxed().WithHighestBitrate().Url;
+                var ret = await c.Client.GetStringAsync($"https://youtube.com/get_video_info?style=json&video_id={id}");
+                var hm = WebUtility.UrlDecode(ret);
+                var t = hm.IndexOf('{');
+                var c1 = hm.Substring(t);
+                var l = c1.LastIndexOf('}');
+                var c2 = c1.Substring(0, l + 1);
+                var h = JsonSerializer.Deserialize<YoutubeVideo>(c2);
+                var url = h.StreamingDataField
+                .AdaptiveFormats
+                .OrderByDescending(x => x.AudioSampleRate)
+                .First(x => x.MimeType.Contains("opus")).Url;
                 var resp = await c.Client.GetAsync(url, System.Net.Http.HttpCompletionOption.ResponseHeadersRead);
                 HttpContext.Response.ContentType = resp.Content.Headers.ContentType.MediaType;
                 using (var stream = await resp.Content.ReadAsStreamAsync())
