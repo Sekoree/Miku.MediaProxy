@@ -1,11 +1,12 @@
-﻿using System;
+﻿using NNDD.Entities.ResultEntities;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace NNDD.Entities.ResultEntities
+namespace Miku.MediaProxy.Entities.NND.ResultEntities
 {
-    public struct TrackInfo
+    public struct TrackInfoExtended
     {
         public string Author { get; set; }
         public Uri AuthorUrl { get; set; }
@@ -17,5 +18,9 @@ namespace NNDD.Entities.ResultEntities
         public Uri TrackUrl { get; set; }
         public Uri DirectUrl { get; set; }
         public Uri ThumbnailUrl { get; set; }
+
+        public string Description { get; set; }
+        public List<string> VideoQualities { get; set; }
+        public List<string> AudioQualities { get; set; }
     }
 }

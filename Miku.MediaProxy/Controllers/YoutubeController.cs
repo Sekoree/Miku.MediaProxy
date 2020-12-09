@@ -34,44 +34,63 @@ namespace NNDD.Controllers
         public async Task<TrackInfo> GetYTTrackInfoAsync(string id)
         {
             var c = _httpClientManager.GetManagedHttpClient();
-            var ret = await c.Client.GetStringAsync($"https://youtube.com/get_video_info?video_id={id}&hl=en&el=embedded");
-            var hm = WebUtility.UrlDecode(ret);
-            var t = hm.IndexOf('{');
-            var c1 = hm.Substring(t);
-            var l = c1.LastIndexOf('}');
-            var c2 = c1.Substring(0, l + 1);
-            var h = JsonSerializer.Deserialize<YoutubeVideo>(c2);
-            Uri audurl = default; 
+            bool usedYE = false;
+            try
+            {
+                var ret = await c.Client.GetStringAsync($"https://youtube.com/get_video_info?video_id={id}&hl=en&el=embedded");
+                var hm = WebUtility.UrlDecode(ret);
+                var t = hm.IndexOf('{');
+                var c1 = hm.Substring(t);
+                var l = c1.LastIndexOf('}');
+                var c2 = c1.Substring(0, l + 1);
+                var h = JsonSerializer.Deserialize<YoutubeVideo>(c2);
+                Uri audurl = default;
 
-            if (h.StreamingDataField == null || h.StreamingDataField?.AdaptiveFormats?.Any(x => x.Url == null) == true)
-            {
-                var manif = await _youtubeClient.Videos.Streams.GetManifestAsync(new VideoId(id));
-                audurl = new Uri(manif.GetAudioOnly().WithHighestBitrate().Url);
-                _logger.LogInformation("YE handled");
+                if (h.StreamingDataField == null || h.StreamingDataField?.AdaptiveFormats?.Any(x => x.Url == null) == true)
+                {
+                    var manif = await _youtubeClient.Videos.Streams.GetManifestAsync(new VideoId(id));
+                    audurl = new Uri(manif.GetAudioOnly().WithHighestBitrate().Url);
+                    usedYE = true;
+                    //_logger.LogInformation("YoutubeExplode handled");
+                }
+                else
+                {
+                    audurl = h.StreamingDataField
+                    .AdaptiveFormats
+                    .OrderByDescending(x => x.AudioSampleRate)
+                    .First(x => x.MimeType.Contains("opus")).Url;
+                    //_logger.LogInformation("Direct handled");
+                }
+                var info = new TrackInfo
+                {
+                    Author = h.VideoDetailsField.Author,
+                    AuthorIconUrl = null, //no fast endpoint for that
+                    AuthorUrl = h.MicroformatField.PlayerMicroformatRenderer.OwnerProfileUrl,
+                    IsLive = h.VideoDetailsField.IsLiveContent.GetValueOrDefault(),
+                    Length = double.Parse(h.VideoDetailsField.LengthSeconds),
+                    DirectUrl = audurl,
+                    ThumbnailUrl = h.VideoDetailsField.Thumbnail.Thumbnails.OrderByDescending(x => x.Width).First().Url,
+                    Title = h.VideoDetailsField.Title,
+                    TrackUrl = new Uri($"https://www.youtube.com/watch?v={h.VideoDetailsField.VideoId}"),
+                    UploadDate = h.MicroformatField.PlayerMicroformatRenderer.UploadDate.GetValueOrDefault()
+                };
+                c.ChangeStatus();
+                return info;
             }
-            else
+            catch (Exception ex)
             {
-                audurl = h.StreamingDataField
-                .AdaptiveFormats
-                .OrderByDescending(x => x.AudioSampleRate)
-                .First(x => x.MimeType.Contains("opus")).Url;
-                _logger.LogInformation("Direct handled");
+                _logger.LogError(ex.ToString());
             }
-            var info = new TrackInfo
+            finally
             {
-                Author = h.VideoDetailsField.Author,
-                AuthorIconUrl = null, //no fast endpoint for that
-                AuthorUrl = h.MicroformatField.PlayerMicroformatRenderer.OwnerProfileUrl,
-                IsLive = h.VideoDetailsField.IsLiveContent.GetValueOrDefault(),
-                Length = double.Parse(h.VideoDetailsField.LengthSeconds),
-                DirectUrl = audurl,
-                ThumbnailUrl = h.VideoDetailsField.Thumbnail.Thumbnails.OrderByDescending(x => x.Width).First().Url,
-                Title = h.VideoDetailsField.Title,
-                TrackUrl = new Uri($"https://www.youtube.com/watch?v={h.VideoDetailsField.VideoId}"),
-                UploadDate = h.MicroformatField.PlayerMicroformatRenderer.UploadDate.GetValueOrDefault()
-            };
-            c.ChangeStatus();
-            return info;
+                var manifString = usedYE ? "YoutubeExplode" : "Direct";
+                _logger.LogInformation($"Path: {HttpContext.Request.Path}\n" +
+                    $"Parameter: {id}\n" +
+                    $"Client IP: {HttpContext.Connection.RemoteIpAddress}\n" +
+                    $"Manifest got from: {manifString}");
+                c.ChangeStatus();
+            }
+            return default;
         }
 
         [Route("{id}")]
@@ -108,6 +127,9 @@ namespace NNDD.Controllers
             finally
             {
                 c.ChangeStatus();
+                _logger.LogInformation($"Path: {HttpContext.Request.Path}\n" +
+                    $"Parameter: {id}\n" +
+                    $"Client IP: {HttpContext.Connection.RemoteIpAddress}");
             }
         }
     }
