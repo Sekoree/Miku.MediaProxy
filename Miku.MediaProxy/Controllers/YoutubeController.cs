@@ -1,6 +1,9 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Miku.Entities.Youtube;
+using Miku.MediaProxy.Entities.NND.ResultEntities;
 using NNDD.Entities;
 using NNDD.Entities.ResultEntities;
 using System;
@@ -30,7 +33,19 @@ namespace NNDD.Controllers
             this._youtubeClient = youtubeClient;
         }
 
+        /// <summary>
+        /// Get info on a youtube video and an ordered list of direct link qualities (best last)
+        /// </summary>
+        /// <remarks>
+        /// No avatar url as this is speed optimized and there is no fast way to get it
+        /// </remarks>
+        /// <param name="id">ID of a youtube video</param>
+        /// <returns>JSOn data about a Youtube video</returns>
+        [HttpGet]
+        [Produces("application/json")]
         [Route("{id}/info")]
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "User")]
+        [ApiExplorerSettings(IgnoreApi = true)]
         public async Task<TrackInfo> GetYTTrackInfoAsync(string id)
         {
             var c = _httpClientManager.GetManagedHttpClient();
@@ -51,7 +66,6 @@ namespace NNDD.Controllers
                     var manif = await _youtubeClient.Videos.Streams.GetManifestAsync(new VideoId(id));
                     audurl = new Uri(manif.GetAudioOnly().WithHighestBitrate().Url);
                     usedYE = true;
-                    //_logger.LogInformation("YoutubeExplode handled");
                 }
                 else
                 {
@@ -59,7 +73,6 @@ namespace NNDD.Controllers
                     .AdaptiveFormats
                     .OrderByDescending(x => x.AudioSampleRate)
                     .First(x => x.MimeType.Contains("opus")).Url;
-                    //_logger.LogInformation("Direct handled");
                 }
                 var info = new TrackInfo
                 {
@@ -93,7 +106,53 @@ namespace NNDD.Controllers
             return default;
         }
 
+        /// <summary>
+        /// Get extended info on a youtube video and an ordered list of direct link qualities (best last)
+        /// </summary>
+        /// <remarks>
+        /// This also includes description and author avatar as requests for this cant be more speed optimized
+        /// </remarks>
+        /// <param name="id">ID of a youtube video</param>
+        /// <returns>JSOn data about a Youtube video</returns>
+        [HttpGet]
+        [Produces("application/json")]
+        [Route("{id}/infoex")]
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "User")]
+        [ApiExplorerSettings(IgnoreApi = true)]
+        public async Task<TrackInfoExtended> GetYTTrackInfoExtendedAsync(string id)
+        {
+            var video = await _youtubeClient.Videos.GetAsync($"https://youtube.com/watch?v=" + id);
+            var user = await _youtubeClient.Channels.GetAsync(video.ChannelId);
+            var manif = await _youtubeClient.Videos.Streams.GetManifestAsync(video.Id);
+            var info = new TrackInfoExtended
+            {
+                Author = video.Author,
+                AuthorIconUrl = new Uri(user.LogoUrl),
+                AuthorUrl = new Uri(user.Url),
+                IsLive = false,
+                Length = video.Duration.TotalSeconds,
+                DirectUrl = new Uri(manif.GetAudioOnly().WithHighestBitrate().Url),
+                ThumbnailUrl = new Uri(video.Thumbnails.MaxResUrl),
+                Title = video.Title,
+                TrackUrl = new Uri(video.Url),
+                UploadDate = video.UploadDate,
+                Description = video.Description,
+                AudioQualities = manif.GetAudio().OrderBy(x => x.Bitrate).Select(x => x.Url).ToList(),
+                VideoQualities = manif.GetVideo().OrderBy(x => x.Bitrate).Select(x => x.Url).ToList()
+            };
+            return info;
+        }
+
+        /// <summary>
+        /// Get the highest quality audio stream of a youtube video
+        /// </summary>
+        /// <param name="id">ID of a youtube video</param>
+        /// <returns>audio/opus data</returns>
+        [HttpGet]
+        [Produces("audio/opus")]
         [Route("{id}")]
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "User")]
+        [ApiExplorerSettings(IgnoreApi = true)]
         public async Task GetYTTrackWiteAsync(string id)
         {
 
@@ -108,11 +167,20 @@ namespace NNDD.Controllers
                 var l = c1.LastIndexOf('}');
                 var c2 = c1.Substring(0, l + 1);
                 var h = JsonSerializer.Deserialize<YoutubeVideo>(c2);
-                var url = h.StreamingDataField
-                .AdaptiveFormats
-                .OrderByDescending(x => x.AudioSampleRate)
-                .First(x => x.MimeType.Contains("opus")).Url;
-                var resp = await c.Client.GetAsync(url, System.Net.Http.HttpCompletionOption.ResponseHeadersRead);
+                Uri audurl = default;
+                if (h.StreamingDataField == null || h.StreamingDataField?.AdaptiveFormats?.Any(x => x.Url == null) == true)
+                {
+                    var manif = await _youtubeClient.Videos.Streams.GetManifestAsync(new VideoId(id));
+                    audurl = new Uri(manif.GetAudioOnly().WithHighestBitrate().Url);
+                }
+                else
+                {
+                    audurl = h.StreamingDataField
+                    .AdaptiveFormats
+                    .OrderByDescending(x => x.AudioSampleRate)
+                    .First(x => x.MimeType.Contains("opus")).Url;
+                }
+                var resp = await c.Client.GetAsync(audurl, System.Net.Http.HttpCompletionOption.ResponseHeadersRead);
                 HttpContext.Response.ContentType = resp.Content.Headers.ContentType.MediaType;
                 using (var stream = await resp.Content.ReadAsStreamAsync())
                 {

@@ -1,0 +1,114 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Miku.MediaProxy</name>
+    </assembly>
+    <members>
+        <member name="M:NNDD.Controllers.NNDController.GetNNDVideoInfoAsync(System.String)">
+            <summary>
+            Get some info about a NicoNicoDouga video
+            </summary>
+            <param name="id">The ID of a video should start with to characters and then a few numbers</param>
+            <returns>JSON</returns>
+        </member>
+        <member name="M:NNDD.Controllers.NNDController.GetNNDVideoInfoExtendedAsync(System.String)">
+            <summary>
+            Get extended info about a NicoNicoDouage video
+            </summary>
+            <param name="id">The ID of a video should start with to characters and then a few numbers</param>
+            <returns>JSON</returns>
+        </member>
+        <member name="M:NNDD.Controllers.NNDController.GetFLInfoAsync(System.String,System.String)">
+            <summary>
+            Gets info about a video via the flapi, the direct link form that is extremely slow
+            </summary>
+            <param name="id"></param>
+            <param name="eco"></param>
+            <returns>The output of the flapi as array</returns>
+        </member>
+        <member name="M:NNDD.Controllers.NNDController.GetNNDVideoAsAudioAsync(System.String)">
+            <summary>
+            Get a NicoNicoDouage video as mp3 (320k)
+            </summary>
+            <param name="id">The ID of a video should start with to characters and then a few numbers</param>
+            <returns>audio/mpeg stream</returns>
+        </member>
+        <member name="M:NNDD.Controllers.NNDController.GetNNDVideoDirectSmileAsync(System.String)">
+            <summary>
+            Get a NicoNicoDouga video from its watchpage direct link (very slow!)
+            </summary>
+            <param name="id">The ID of a video should start with to characters and then a few numbers</param>
+            <returns>video/mp4 stream</returns>
+        </member>
+        <member name="M:NNDD.Controllers.NNDController.GetNNDVideoAsync(System.String,System.String,System.String)">
+            <summary>
+            Get a NicoNicoDouage video via the API
+            </summary>
+            <remarks>
+            You can use custom audio and video qualities from the nnd/{id}/infoex endpoint
+            Default is "best" audio quality and "worst" video quality, which is usually low bitrate 360p video and 128kbps audio
+            </remarks>
+            <param name="id">The ID of a video should start with to characters and then a few numbers</param>
+            <param name="video">Video quality string</param>
+            <param name="audio">Audio quality string</param>
+            <returns>video/mp4 stream</returns>
+        </member>
+        <member name="M:NNDD.Controllers.NNDController.GetPrepareNNDTokenVideo(System.String,System.String,System.String)">
+            <summary>
+            Get a Token for a prepared NND video
+            </summary>
+            <param name="id">ID of the NND video consists of 2 letters and a few numbers</param>
+            <param name="video">Custom audio quality, can be obtained from nnd/{id}/infoex endpoint</param>
+            <param name="audio">Custom video quality, can be obtained from nnd/{id}/infoex endpoint</param>
+            <returns>The token for the nnd/prepare/{id}/{token} or nnd/prepared/{token} endpoint, to get the video stream</returns>
+        </member>
+        <member name="M:NNDD.Controllers.NNDController.GetPreparedNNDVideoNI(System.String)">
+            <summary>
+            Get a previously prepared video
+            </summary>
+            <remarks>
+            Shorter alternative for nnd/prepare/{id}/{token}
+            </remarks>
+            <param name="token">Can be obtained from the /prepare/{id} endpint. You need an API key for that!</param>
+            <returns>video/mp4</returns>
+        </member>
+        <member name="M:NNDD.Controllers.NNDController.GetPreparedNNDVideo(System.String,System.String)">
+            <summary>
+            Get a previously prepared video
+            </summary>
+            <remarks>
+            Longer alternative for nnd/prepared/{token}
+            </remarks>
+            <param name="id">ID of the NND video consists of 2 letters and a few numbers</param>
+            <param name="token">Can be obtained from the /prepare/{id} endpint. You need an API key for that!</param>
+            <returns>video/mp4</returns>
+        </member>
+        <member name="M:NNDD.Controllers.YoutubeController.GetYTTrackInfoAsync(System.String)">
+            <summary>
+            Get info on a youtube video and an ordered list of direct link qualities (best last)
+            </summary>
+            <remarks>
+            No avatar url as this is speed optimized and there is no fast way to get it
+            </remarks>
+            <param name="id">ID of a youtube video</param>
+            <returns>JSOn data about a Youtube video</returns>
+        </member>
+        <member name="M:NNDD.Controllers.YoutubeController.GetYTTrackInfoExtendedAsync(System.String)">
+            <summary>
+            Get extended info on a youtube video and an ordered list of direct link qualities (best last)
+            </summary>
+            <remarks>
+            This also includes description and author avatar as requests for this cant be more speed optimized
+            </remarks>
+            <param name="id">ID of a youtube video</param>
+            <returns>JSOn data about a Youtube video</returns>
+        </member>
+        <member name="M:NNDD.Controllers.YoutubeController.GetYTTrackWiteAsync(System.String)">
+            <summary>
+            Get the highest quality audio stream of a youtube video
+            </summary>
+            <param name="id">ID of a youtube video</param>
+            <returns>audio/opus data</returns>
+        </member>
+    </members>
+</doc>
